@@ -350,6 +350,10 @@ function runCommand(command, player, chunkManager, saveWorld, setWorldTime) {
     return `Set time to ${preset}`;
   }
 
+  if (name === "seed") {
+    return `Seed: ${chunkManager.seed}`;
+  }
+
   return `Unknown command: /${name ?? ""}`;
 }
 
