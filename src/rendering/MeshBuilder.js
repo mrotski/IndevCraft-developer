@@ -264,7 +264,12 @@ export class MeshBuilder {
     }
 
     if (positionsWater.length > 0) {
-      const waterMaterial = this.createWaterMaterial();
+      const waterMaterial = this.material.clone();
+      waterMaterial.side = THREE.DoubleSide;
+      waterMaterial.transparent = true;
+      waterMaterial.depthWrite = false;
+      waterMaterial.blending = THREE.NormalBlending;
+
       const waterMesh = addMeshFromArrays(
         positionsWater,
         normalsWater,
