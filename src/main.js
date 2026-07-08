@@ -311,11 +311,11 @@ function runCommand(command, player, chunkManager, saveWorld, setWorldTime) {
 
     if (values.length === 2) {
       const [x, z] = values;
-      chunkManager.prepareAreaAround(x, z);
+      chunkManager.prepareAreaAround(x, z, 96);
       player.position.copy(chunkManager.findSurfacePosition(x, z));
     } else if (values.length === 3) {
       const [x, y, z] = values;
-      chunkManager.prepareAreaAround(x, z);
+      chunkManager.prepareAreaAround(x, z, 96);
       player.position.set(x, y, z);
     } else {
       return "Usage: /tp <x> <y> <z> or /tp <x> <z>";

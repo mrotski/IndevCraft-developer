@@ -228,11 +228,17 @@ export class ChunkManager {
     return new THREE.Vector3(Math.floor(worldX) + 0.5, SEA_LEVEL + 20, Math.floor(worldZ) + 0.5);
   }
 
-  prepareAreaAround(worldX, worldZ, budget = 25) {
+  prepareAreaAround(worldX, worldZ, budget = 96) {
     const { cx, cz } = this.worldToChunk(worldX, worldZ);
+    const targetKey = this.key(cx, cz);
     this.queueNearbyChunks(cx, cz);
-    this.generatePending(budget);
-    this.rebuildDirtyMeshes(budget, cx, cz);
+
+    for (let generated = 0; generated < budget && this.pending.length; generated++) {
+      this.generatePending(1);
+      if (this.chunks.has(targetKey)) break;
+    }
+
+    this.rebuildDirtyMeshes(Math.max(4, Math.floor(budget / 8)), cx, cz);
   }
 
   raycast(origin, direction, maxDistance = 6) {
