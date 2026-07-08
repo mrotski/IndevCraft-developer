@@ -1,12 +1,14 @@
 export class Chat {
-  constructor({ onCommand }) {
+  constructor({ onCommand, onShow, onHide }) {
     this.onCommand = onCommand;
+    this.onShow = onShow;
+    this.onHide = onHide;
     this.root = document.getElementById("chat");
     this.log = document.getElementById("chatLog");
     this.input = document.getElementById("chatInput");
     this.open = false;
 
-    this.addMessage("Press T to chat. Try /tp 0 80 0 or /tp 500 500.");
+    this.addMessage("Press T to chat. Try /tp 0 80 0, /tp 500 500, or /time set day.");
 
     document.addEventListener("keydown", (event) => {
       const activeElement = document.activeElement;
@@ -45,6 +47,7 @@ export class Chat {
     this.root.classList.add("open");
     this.input.value = text;
     this.input.focus();
+    this.onShow?.();
   }
 
   hide() {
@@ -52,6 +55,7 @@ export class Chat {
     this.input.value = "";
     this.input.blur();
     this.root.classList.remove("open");
+    this.onHide?.();
   }
 
   submit() {

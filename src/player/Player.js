@@ -6,40 +6,36 @@ const PLAYER_HEIGHT = 1.82;
 const EYE_HEIGHT = 1.62;
 
 export class Player {
-  constructor(scene, canvas, chunkManager, controls, startPosition) {
-    this.scene = scene;
+  constructor(camera, canvas, chunkManager, controls, startPosition) {
     this.canvas = canvas;
     this.chunkManager = chunkManager;
     this.controls = controls;
     this.position = startPosition.clone();
-    this.velocity = new BABYLON.Vector3(0, 0, 0);
+    this.velocity = new THREE.Vector3(0, 0, 0);
     this.onGround = false;
     this.unstuckCooldown = 0;
 
-    this.camera = new BABYLON.FreeCamera("player-camera", this.position.clone(), scene);
-    this.camera.minZ = 0.03;
-    this.camera.maxZ = 650;
-    this.camera.fov = 1.05;
-    this.camera.inertia = 0;
-    this.camera.attachControl(canvas, false);
-    this.camera.inputs.clear();
+    this.camera = camera;
+    this.camera.near = 0.03;
+    this.camera.far = 650;
+    this.camera.updateProjectionMatrix();
     this.updateCamera();
   }
 
   update(deltaSeconds) {
-    this.updateRotation();
     this.unstuckCooldown = Math.max(0, this.unstuckCooldown - deltaSeconds);
     if (!this.canOccupy(this.position) && this.unstuckCooldown === 0) {
       this.unstuck();
     }
     this.updateMovement(deltaSeconds);
     this.updateCamera();
+    this.updateRotation();
   }
 
   updateRotation() {
-    this.camera.rotation.x = this.controls.pitch;
-    this.camera.rotation.y = this.controls.yaw;
-    this.camera.rotation.z = 0;
+    const direction = this.getViewDirection();
+    // Keep the camera aligned with the same forward vector used for movement and raycasts.
+    this.camera.lookAt(this.camera.position.clone().add(direction));
   }
 
   updateMovement(deltaSeconds) {
@@ -55,8 +51,9 @@ export class Player {
       const right = move.right / length;
       const sin = Math.sin(this.controls.yaw);
       const cos = Math.cos(this.controls.yaw);
+      // Three.js cameras face -Z by default, so keep world movement on the same basis.
       desiredX = (sin * forward + cos * right) * speed;
-      desiredZ = (cos * forward - sin * right) * speed;
+      desiredZ = (-cos * forward + sin * right) * speed;
     }
 
     this.velocity.x = desiredX;
@@ -83,8 +80,8 @@ export class Player {
     this.moveAxis("y", this.velocity.y * deltaSeconds);
 
     if (this.position.y < 2 && !this.isInWater(this.position)) {
-      this.position.copyFrom(this.chunkManager.findSpawn());
-      this.velocity.y = 0;
+      this.position.copy(this.chunkManager.findSpawn());
+      this.velocity.set(0, 0, 0);
     }
   }
 
@@ -93,7 +90,7 @@ export class Player {
     const next = this.position.clone();
     next[axis] += amount;
     if (this.canOccupy(next)) {
-      this.position.copyFrom(next);
+      this.position.copy(next);
       if (axis === "y") this.onGround = false;
       return;
     }
@@ -143,16 +140,16 @@ export class Player {
 
   unstuck() {
     for (let offsetY = 1; offsetY < 24; offsetY++) {
-      const candidate = this.position.add(new BABYLON.Vector3(0, offsetY, 0));
+      const candidate = this.position.clone().add(new THREE.Vector3(0, offsetY, 0));
       if (this.canOccupy(candidate)) {
-        this.position.copyFrom(candidate);
+        this.position.copy(candidate);
         this.velocity.set(0, 0, 0);
         this.unstuckCooldown = 0.5;
         return;
       }
     }
 
-    this.position.copyFrom(this.chunkManager.findSpawn());
+    this.position.copy(this.chunkManager.findSpawn());
     this.velocity.set(0, 0, 0);
     this.unstuckCooldown = 0.5;
   }
@@ -174,11 +171,12 @@ export class Player {
   }
 
   getViewDirection() {
-    const horizontal = Math.cos(this.controls.pitch);
-    return new BABYLON.Vector3(
+    const pitch = this.controls.pitch;
+    const horizontal = Math.cos(pitch);
+    return new THREE.Vector3(
       Math.sin(this.controls.yaw) * horizontal,
-      -Math.sin(this.controls.pitch),
-      Math.cos(this.controls.yaw) * horizontal,
+      -Math.sin(pitch),
+      -Math.cos(this.controls.yaw) * horizontal,
     ).normalize();
   }
 }

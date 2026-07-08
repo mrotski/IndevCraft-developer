@@ -1,23 +1,34 @@
 export class PauseMenu {
-  constructor({ saveManager, onBack, onSave, onLoad }) {
+  constructor({ saveManager, settingsManager, onBack, onSave, onLoad, onRenderDistanceChange, onFogChange }) {
     this.saveManager = saveManager;
+    this.settingsManager = settingsManager;
     this.onBack = onBack;
     this.onSave = onSave;
     this.onLoad = onLoad;
+    this.onRenderDistanceChange = onRenderDistanceChange;
+    this.onFogChange = onFogChange;
     this.root = document.getElementById("pauseMenu");
     this.mainPanel = document.getElementById("pauseMain");
+    this.settingsPanel = document.getElementById("pauseSettings");
     this.savePanel = document.getElementById("pauseSave");
     this.loadPanel = document.getElementById("pauseLoad");
     this.saveInput = document.getElementById("worldNameInput");
     this.worldList = document.getElementById("worldList");
+    this.renderDistanceSlider = document.getElementById("renderDistanceSlider");
+    this.renderDistanceValue = document.getElementById("renderDistanceValue");
+    this.fogToggle = document.getElementById("fogToggle");
     this.open = false;
 
     document.getElementById("backToGame").addEventListener("click", () => this.hide());
+    document.getElementById("openSettings").addEventListener("click", () => this.showSettingsPanel());
     document.getElementById("openSaveWorld").addEventListener("click", () => this.showSavePanel());
     document.getElementById("openLoadWorld").addEventListener("click", () => this.showLoadPanel());
+    document.getElementById("backFromSettings").addEventListener("click", () => this.showMainPanel());
     document.getElementById("confirmSaveWorld").addEventListener("click", () => this.saveWorld());
     document.getElementById("cancelSaveWorld").addEventListener("click", () => this.showMainPanel());
     document.getElementById("backFromLoad").addEventListener("click", () => this.showMainPanel());
+    this.renderDistanceSlider.addEventListener("input", () => this.setRenderDistance(this.renderDistanceSlider.value));
+    this.fogToggle.addEventListener("click", () => this.toggleFog());
   }
 
   isOpen() {
@@ -49,6 +60,11 @@ export class PauseMenu {
 
   showMainPanel() {
     this.setPanel(this.mainPanel);
+  }
+
+  showSettingsPanel() {
+    this.setPanel(this.settingsPanel);
+    this.renderSettings();
   }
 
   showSavePanel() {
@@ -96,8 +112,30 @@ export class PauseMenu {
     }
   }
 
+  renderSettings() {
+    const renderDistance = this.settingsManager?.getRenderDistance?.() ?? 6;
+    this.renderDistanceSlider.value = String(renderDistance);
+    this.renderDistanceValue.textContent = String(renderDistance);
+
+    const fogEnabled = this.settingsManager?.getFogEnabled?.() ?? true;
+    this.fogToggle.textContent = `Fog: ${fogEnabled ? "On" : "Off"}`;
+    this.fogToggle.classList.toggle("selected", fogEnabled);
+  }
+
+  setRenderDistance(value) {
+    const next = this.settingsManager?.setRenderDistance?.(value);
+    this.onRenderDistanceChange?.(next ?? Number(value));
+    this.renderSettings();
+  }
+
+  toggleFog() {
+    const enabled = this.settingsManager?.toggleFog?.();
+    this.onFogChange?.(enabled ?? true);
+    this.renderSettings();
+  }
+
   setPanel(activePanel) {
-    for (const panel of [this.mainPanel, this.savePanel, this.loadPanel]) {
+    for (const panel of [this.mainPanel, this.settingsPanel, this.savePanel, this.loadPanel]) {
       panel.classList.toggle("active", panel === activePanel);
     }
   }

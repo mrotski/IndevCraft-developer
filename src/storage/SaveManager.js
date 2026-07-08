@@ -1,5 +1,7 @@
 import { SAVE_INDEX_KEY, SAVE_KEY } from "../constants.js";
 
+const HOTBAR_SLOTS = 9;
+
 export class SaveManager {
   constructor() {
     this.activeName = localStorage.getItem(SAVE_INDEX_KEY) ?? "World 1";
@@ -23,6 +25,8 @@ export class SaveManager {
       name: this.activeName,
       seed,
       player: null,
+      worldTimeMs: 0,
+      hotbar: Array(HOTBAR_SLOTS).fill(null),
       chunks: {},
       savedAt: Date.now(),
     };
@@ -37,12 +41,30 @@ export class SaveManager {
     return this.data?.player ?? null;
   }
 
+  getWorldTime() {
+    return this.data?.worldTimeMs ?? 0;
+  }
+
+  getHotbar() {
+    return this.data?.hotbar ?? Array(HOTBAR_SLOTS).fill(null);
+  }
+
   setPlayer(position, rotation) {
     if (!this.data) return;
     this.data.player = {
       position: [position.x, position.y, position.z],
       rotation: [rotation.x, rotation.y],
     };
+  }
+
+  setWorldTime(worldTimeMs) {
+    if (!this.data) return;
+    this.data.worldTimeMs = Number.isFinite(worldTimeMs) ? worldTimeMs : 0;
+  }
+
+  setHotbar(hotbar) {
+    if (!this.data) return;
+    this.data.hotbar = this.normalizeHotbar(hotbar);
   }
 
   getChunkChanges(key) {
@@ -119,6 +141,8 @@ export class SaveManager {
   prepareData(data, name) {
     data.name = this.normalizeName(data.name ?? name);
     data.chunks ??= {};
+    data.worldTimeMs ??= 0;
+    data.hotbar = this.normalizeHotbar(data.hotbar);
     this.removeRetiredBlocks(data);
   }
 
@@ -139,5 +163,15 @@ export class SaveManager {
         }
       }
     }
+  }
+
+  normalizeHotbar(hotbar) {
+    const empty = Array(HOTBAR_SLOTS).fill(null);
+    if (!Array.isArray(hotbar)) return empty;
+    for (let index = 0; index < HOTBAR_SLOTS; index++) {
+      const value = Number(hotbar[index]);
+      empty[index] = Number.isFinite(value) && value > 0 ? value : null;
+    }
+    return empty;
   }
 }

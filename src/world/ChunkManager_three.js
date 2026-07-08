@@ -5,52 +5,23 @@ import { Chunk } from "./Chunk.js";
 import { TerrainGenerator } from "./TerrainGenerator.js";
 import { CaveGenerator } from "./CaveGenerator.js";
 import { LightEngine } from "./LightEngine.js";
-import { MeshBuilder } from "../rendering/MeshBuilder.js";
+import { MeshBuilderThree } from "../rendering/MeshBuilder_three.js";
 
-export class ChunkManager {
+export class ChunkManagerThree {
   constructor(scene, saveManager, seed, textureAtlas) {
     this.scene = scene;
     this.saveManager = saveManager;
     this.seed = seed >>> 0;
     this.chunks = new Map();
     this.pending = [];
-    this.pendingSet = new Set();
     this.terrain = new TerrainGenerator(this.seed);
     this.caves = new CaveGenerator(this.seed, this.terrain);
     this.lightEngine = new LightEngine();
-    this.meshBuilder = new MeshBuilder(scene, this, textureAtlas);
+    this.meshBuilder = new MeshBuilderThree(scene, this, textureAtlas);
     this.renderDistance = LOAD_RADIUS;
-    this.lastPlayerChunkKey = null;
-    this.lastQueuedRenderDistance = this.renderDistance;
     this.dirtyQueue = [];
     this.dirtySet = new Set();
     this.workAccumulator = 0;
-  }
-
-  update(playerPosition, deltaSeconds = 0) {
-    const playerChunk = this.worldToChunk(playerPosition.x, playerPosition.z);
-    const chunkKey = this.key(playerChunk.cx, playerChunk.cz);
-    const needsStreamingUpdate = chunkKey !== this.lastPlayerChunkKey || this.lastQueuedRenderDistance !== this.renderDistance;
-    if (needsStreamingUpdate) {
-      this.queueNearbyChunks(playerChunk.cx, playerChunk.cz);
-      this.unloadFarChunks(playerChunk.cx, playerChunk.cz);
-      this.lastPlayerChunkKey = chunkKey;
-      this.lastQueuedRenderDistance = this.renderDistance;
-    }
-
-    this.workAccumulator += deltaSeconds;
-    if (this.workAccumulator < 0.05 && (this.pending.length || this.dirtyQueue.length)) {
-      return;
-    }
-    this.workAccumulator = 0;
-
-    if (this.pending.length) {
-      this.generatePending(1);
-    }
-
-    if (this.dirtyQueue.length) {
-      this.rebuildDirtyMeshes(1, playerChunk.cx, playerChunk.cz);
-    }
   }
 
   queueNearbyChunks(centerCx, centerCz) {
@@ -61,9 +32,8 @@ export class ChunkManager {
           const cx = centerCx + dx;
           const cz = centerCz + dz;
           const key = this.key(cx, cz);
-          if (!this.chunks.has(key) && !this.pendingSet.has(key)) {
+          if (!this.chunks.has(key) && !this.pending.includes(key)) {
             this.pending.push(key);
-            this.pendingSet.add(key);
           }
         }
       }
@@ -73,7 +43,6 @@ export class ChunkManager {
   generatePending(budget) {
     for (let i = 0; i < budget && this.pending.length; i++) {
       const key = this.pending.shift();
-      this.pendingSet.delete(key);
       if (this.chunks.has(key)) continue;
       const [cx, cz] = key.split(",").map(Number);
       const chunk = new Chunk(cx, cz);
@@ -89,23 +58,15 @@ export class ChunkManager {
     }
   }
 
-  rebuildDirtyMeshes(budget, centerCx = 0, centerCz = 0) {
+  rebuildDirtyMeshes(budget) {
     if (!this.dirtyQueue.length) return;
-    const dirtyChunks = this.dirtyQueue
-      .filter((chunk) => chunk?.dirty && chunk?.hasGenerated)
-      .sort((a, b) => {
-        const da = Math.max(Math.abs(a.cx - centerCx), Math.abs(a.cz - centerCz));
-        const db = Math.max(Math.abs(b.cx - centerCx), Math.abs(b.cz - centerCz));
-        return da - db;
-      })
-      .slice(0, budget);
-
+    const dirtyChunks = this.dirtyQueue.filter((chunk) => chunk?.dirty && chunk?.hasGenerated).slice(0, budget);
     for (const chunk of dirtyChunks) {
       const queueKey = this.key(chunk.cx, chunk.cz);
       this.dirtySet.delete(queueKey);
       if (!chunk.dirty) continue;
       this.lightEngine.compute(chunk);
-      this.meshBuilder.build(chunk, 0);
+      this.meshBuilder.build(chunk);
     }
   }
 
@@ -198,22 +159,6 @@ export class ChunkManager {
     return true;
   }
 
-  getSunLight(worldX, worldY, worldZ) {
-    if (worldY < 0 || worldY >= WORLD_HEIGHT) return 0;
-    const { cx, cz, lx, lz } = this.worldToLocal(worldX, worldZ);
-    const chunk = this.chunks.get(this.key(cx, cz));
-    if (!chunk) return 15;
-    return chunk.getSunLight(lx, Math.floor(worldY), lz);
-  }
-
-  getBlockLight(worldX, worldY, worldZ) {
-    if (worldY < 0 || worldY >= WORLD_HEIGHT) return 0;
-    const { cx, cz, lx, lz } = this.worldToLocal(worldX, worldZ);
-    const chunk = this.chunks.get(this.key(cx, cz));
-    if (!chunk) return 0;
-    return chunk.getBlockLight(lx, Math.floor(worldY), lz);
-  }
-
   findSpawn() {
     return this.findSurfacePosition(0, 0);
   }
@@ -232,11 +177,29 @@ export class ChunkManager {
     const { cx, cz } = this.worldToChunk(worldX, worldZ);
     this.queueNearbyChunks(cx, cz);
     this.generatePending(budget);
-    this.rebuildDirtyMeshes(budget, cx, cz);
+    this.rebuildDirtyMeshes(budget);
+  }
+
+  update(playerPosition, deltaSeconds = 0) {
+    const playerChunk = this.worldToChunk(playerPosition.x, playerPosition.z);
+    this.queueNearbyChunks(playerChunk.cx, playerChunk.cz);
+
+    this.workAccumulator += deltaSeconds;
+    if (this.workAccumulator < 0.05 && (this.pending.length || this.dirtyQueue.length)) {
+      return;
+    }
+    this.workAccumulator = 0;
+
+    this.generatePending(1);
+    this.unloadFarChunks(playerChunk.cx, playerChunk.cz);
+    this.rebuildDirtyMeshes(1);
   }
 
   raycast(origin, direction, maxDistance = 6) {
-    const rayDirection = direction.normalize();
+    // simple voxel raycast reused from original, expects origin/direction with x,y,z
+    const rayDirection = { x: direction.x, y: direction.y, z: direction.z };
+    const len = Math.hypot(rayDirection.x, rayDirection.y, rayDirection.z);
+    rayDirection.x /= len; rayDirection.y /= len; rayDirection.z /= len;
     let x = Math.floor(origin.x);
     let y = Math.floor(origin.y);
     let z = Math.floor(origin.z);
@@ -255,14 +218,7 @@ export class ChunkManager {
     while (distance <= maxDistance) {
       const block = this.getBlock(x, y, z);
       if (block !== Blocks.AIR && block !== Blocks.WATER) {
-        return {
-          x,
-          y,
-          z,
-          block,
-          normal,
-          place: { x: x + normal.x, y: y + normal.y, z: z + normal.z },
-        };
+        return { x, y, z, block, normal, place: { x: x + normal.x, y: y + normal.y, z: z + normal.z } };
       }
 
       if (maxX < maxY && maxX < maxZ) {
@@ -303,29 +259,14 @@ export class ChunkManager {
     }
   }
 
-  shiftWorldOrigin(delta) {
-    for (const chunk of this.chunks.values()) {
-      if (!chunk.mesh) continue;
-      chunk.mesh.position.subtractInPlace(delta);
-    }
-  }
-
   worldToChunk(x, z) {
-    return {
-      cx: Math.floor(x / CHUNK_SIZE),
-      cz: Math.floor(z / CHUNK_SIZE),
-    };
+    return { cx: Math.floor(x / CHUNK_SIZE), cz: Math.floor(z / CHUNK_SIZE) };
   }
 
   worldToLocal(x, z) {
     const cx = Math.floor(x / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
-    return {
-      cx,
-      cz,
-      lx: ((Math.floor(x) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
-      lz: ((Math.floor(z) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
-    };
+    return { cx, cz, lx: ((Math.floor(x) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE, lz: ((Math.floor(z) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE };
   }
 
   key(cx, cz) {
